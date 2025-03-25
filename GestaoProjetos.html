@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jogo da Memória - Gestão de Projetos</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background: #f0f0f0;
+      margin: 0;
+      padding: 20px;
+    }
+    h1, h2 {
+      color: #333;
+    }
+    .scoreboard {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      font-size: 1.2em;
+      margin-bottom: 20px;
+    }
+    .game-container {
+      display: grid;
+      grid-template-columns: repeat(3, 120px); /* 3 colunas de 120px */
+      grid-template-rows: repeat(2, 140px); /* 2 linhas de 140px */
+      gap: 15px;
+      margin: auto;
+      justify-content: center;
+    }
+    .card {
+      width: 120px;
+      height: 140px;
+      perspective: 1000px;
+      cursor: pointer;
+    }
+    .card-inner {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      transition: transform 0.6s;
+      transform-style: preserve-3d;
+    }
+    .card.flipped .card-inner {
+      transform: rotateY(180deg);
+    }
+    .card-face {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      backface-visibility: hidden;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: bold;
+      text-align: center;
+      padding: 10px;
+      box-sizing: border-box;
+      overflow: hidden;
+      word-wrap: break-word;
+    }
+    .card-front {
+      background: #ffffff;
+      border: 2px solid #ccc;
+    }
+    .card-back {
+      background: #2196F3;
+      color: #fff;
+      transform: rotateY(180deg);
+    }
+    .buttons {
+      margin-top: 20px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      margin: 5px;
+      cursor: pointer;
+    }
+    .hidden {
+      display: none;
+    }
+    .match .card-back {
+      background: #4CAF50;
+      border: 2px solid #388E3C;
+      color: #fff;
+    }
+    .no-match {
+      border: 2px solid #FF5252;
+    }
+    .mensagem-sucesso {
+      font-size: 1.5em;
+      color: #4CAF50;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Jogo da Memória - Gestão de Projetos</h1>
+  <h2>Fase: <span id="fase">1</span></h2>
+  
+  <div class="scoreboard">
+    <p>✅ Acertos: <span id="acertos">0</span></p>
+    <p>❌ Erros: <span id="erros">0</span></p>
+    <p>⏱️ Tempo: <span id="tempo">0</span>s</p>
+  </div>
+
+  <div class="game-container" id="game"></div>
+
+  <h2 id="parabens" class="hidden">🎉 Parabéns! Você encontrou todos os pares! 🎉</h2>
+  <div id="mensagem-sucesso" class="mensagem-sucesso hidden">Avançando para a próxima fase...</div>
+
+  <div class="buttons">
+    <button onclick="sairJogo()">Sair</button>
+  </div>
+
+  <script>
+    let fase = 1;
+    let acertos = 0;
+    let erros = 0;
+    let firstCard = null;
+    let secondCard = null;
+    let lockBoard = false;
+    let timer;
+    let startTime;
+    let elapsedTime = 0;
+
+    // Função para escapar tags HTML
+    function escapeHTML(str) {
+      return str.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    const niveis = [
+      // Fase 1: Conceitos Básicos de Gestão de Projetos
+      [
+        { id: 1, front: "O que é um projeto?", back: "Um esforço temporário para criar um produto, serviço ou resultado único." },
+        { id: 2, front: "O que é um escopo?", back: "Define o trabalho necessário para entregar o produto final." },
+        { id: 3, front: "O que é um cronograma?", back: "Um plano que define quando as tarefas serão executadas." },
+        { id: 4, front: "O que é um stakeholder?", back: "Qualquer pessoa interessada ou impactada pelo projeto." },
+        { id: 5, front: "O que é um risco?", back: "Um evento incerto que pode afetar o projeto positiva ou negativamente." },
+        { id: 6, front: "O que é um gerente de projetos?", back: "Responsável por planejar, executar e finalizar o projeto." }
+      ],
+      // Fase 2: Metodologias de Gestão de Projetos
+      [
+        { id: 1, front: "O que é PMBOK?", back: "Um guia de boas práticas em gestão de projetos." },
+        { id: 2, front: "O que é Scrum?", back: "Uma metodologia ágil para gerenciamento de projetos." },
+        { id: 3, front: "O que é Kanban?", back: "Um método visual para gerenciar o trabalho em andamento." },
+        { id: 4, front: "O que é Waterfall?", back: "Uma metodologia sequencial de gestão de projetos." },
+        { id: 5, front: "O que é Lean?", back: "Uma abordagem que visa maximizar o valor e minimizar o desperdício." },
+        { id: 6, front: "O que é Agile?", back: "Uma abordagem iterativa e incremental para gerenciamento de projetos." }
+      ],
+      // Fase 3: Ferramentas de Gestão de Projetos
+      [
+        { id: 1, front: "O que é um Gantt Chart?", back: "Um gráfico que ilustra o cronograma do projeto." },
+        { id: 2, front: "O que é um WBS?", back: "Estrutura Analítica do Projeto, que divide o trabalho em partes menores." },
+        { id: 3, front: "O que é um RACI?", back: "Uma matriz de responsabilidades (Responsible, Accountable, Consulted, Informed)." },
+        { id: 4, front: "O que é um RAID?", back: "Riscos, Assumptions, Issues, Dependencies." },
+        { id: 5, front: "O que é um MVP?", back: "Minimum Viable Product, versão mínima viável de um produto." },
+        { id: 6, front: "O que é um KPI?", back: "Key Performance Indicator, métrica para avaliar o sucesso." }
+      ]
+    ];
+
+    function iniciarJogo() {
+      if (fase > niveis.length) {
+        finalizarJogo();
+        return;
+      }
+
+      document.getElementById("fase").textContent = fase;
+      document.getElementById("parabens").classList.add("hidden");
+      document.getElementById("mensagem-sucesso").classList.add("hidden");
+      const paresFaseAtual = niveis[fase - 1];
+      
+      // Seleciona 3 pares aleatórios
+      const paresSelecionados = selecionarParesAleatorios(paresFaseAtual, 3);
+      
+      let cardsArray = [];
+      paresSelecionados.forEach(pair => {
+        cardsArray.push({ pairId: pair.id, content: escapeHTML(pair.front) });
+        cardsArray.push({ pairId: pair.id, content: escapeHTML(pair.back) });
+      });
+      cardsArray.sort(() => 0.5 - Math.random());
+      
+      const gameContainer = document.getElementById("game");
+      gameContainer.innerHTML = "";
+      cardsArray.forEach(cardInfo => {
+        const cardElement = createCard(cardInfo);
+        gameContainer.appendChild(cardElement);
+      });
+
+      // Exibe todas as cartas por 5 segundos
+      exibirCartasPor5Segundos();
+
+      startTimer();
+    }
+
+    function exibirCartasPor5Segundos() {
+      const cards = document.querySelectorAll(".card");
+      cards.forEach(card => {
+        card.classList.add("flipped");
+      });
+
+      setTimeout(() => {
+        cards.forEach(card => {
+          card.classList.remove("flipped");
+        });
+      }, 10000); // 10 segundos
+    }
+
+    function selecionarParesAleatorios(pares, quantidade) {
+      const paresAleatorios = [];
+      const copiaPares = [...pares];
+      while (paresAleatorios.length < quantidade) {
+        const indiceAleatorio = Math.floor(Math.random() * copiaPares.length);
+        paresAleatorios.push(copiaPares.splice(indiceAleatorio, 1)[0]);
+      }
+      return paresAleatorios;
+    }
+
+    function createCard(cardInfo) {
+      const card = document.createElement("div");
+      card.classList.add("card");
+      card.dataset.pairId = cardInfo.pairId;
+      card.innerHTML = `
+        <div class="card-inner">
+          <div class="card-face card-front">?</div>
+          <div class="card-face card-back">${cardInfo.content}</div>
+        </div>`;
+      card.addEventListener("click", () => flipCard(card));
+      return card;
+    }
+
+    function flipCard(card) {
+      if (lockBoard || card.classList.contains("flipped")) return;
+      card.classList.add("flipped");
+
+      if (!firstCard) {
+        firstCard = card;
+        return;
+      }
+
+      secondCard = card;
+      lockBoard = true;
+      checkForMatch();
+    }
+
+    function checkForMatch() {
+      if (!firstCard || !secondCard) return;
+
+      const isMatch = firstCard.dataset.pairId === secondCard.dataset.pairId;
+
+      if (isMatch) {
+        firstCard.classList.add("match");
+        secondCard.classList.add("match");
+        acertos++;
+        firstCard.removeEventListener("click", () => flipCard(firstCard));
+        secondCard.removeEventListener("click", () => flipCard(secondCard));
+        checkWin();
+      } else {
+        erros++;
+        firstCard.classList.add("no-match");
+        secondCard.classList.add("no-match");
+        setTimeout(() => {
+          firstCard.classList.remove("flipped", "no-match");
+          secondCard.classList.remove("flipped", "no-match");
+          resetBoard();
+        }, 1000);
+      }
+
+      document.getElementById("acertos").textContent = acertos;
+      document.getElementById("erros").textContent = erros;
+      if (isMatch) resetBoard();
+    }
+
+    function checkWin() {
+      const totalPairs = document.querySelectorAll(".card").length / 2;
+      const acertosFaseAtual = document.querySelectorAll(".match").length / 2;
+
+      if (acertosFaseAtual === totalPairs) {
+        clearInterval(timer);
+        document.getElementById("parabens").classList.remove("hidden");
+        document.getElementById("mensagem-sucesso").classList.remove("hidden");
+
+        setTimeout(() => {
+          if (fase < niveis.length) {
+            fase++;
+            iniciarJogo(); // Avança para a próxima fase
+          } else {
+            finalizarJogo();
+          }
+        }, 5000); // Aguarda 5 segundos antes de avançar ou finalizar
+      }
+    }
+
+    function resetBoard() {
+      [firstCard, secondCard, lockBoard] = [null, null, false];
+    }
+
+    function finalizarJogo() {
+      clearInterval(timer);
+      const reiniciar = confirm("Parabéns! Você completou todas as fases! Deseja reiniciar o jogo?");
+      if (reiniciar) {
+        fase = 1;
+        acertos = 0;
+        erros = 0;
+        elapsedTime = 0;
+        document.getElementById("acertos").textContent = acertos;
+        document.getElementById("erros").textContent = erros;
+        document.getElementById("tempo").textContent = elapsedTime;
+        iniciarJogo();
+      } else {
+        window.close();
+      }
+    }
+
+    function sairJogo() {
+      if (confirm("Tem certeza que deseja sair do jogo?")) window.close();
+    }
+
+    function startTimer() {
+      startTime = Date.now() - elapsedTime * 1000;
+      timer = setInterval(() => {
+        elapsedTime = Math.floor((Date.now() - startTime) / 1000);
+        document.getElementById("tempo").textContent = elapsedTime;
+      }, 1000);
+    }
+
+    iniciarJogo();
+  </script>
+</body>
+</html>
